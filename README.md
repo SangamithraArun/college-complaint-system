@@ -1,36 +1,77 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# College Complaint Management System
 
-## Getting Started
+A campus complaint portal for students and administrators. Students submit and track complaints; admins assign staff, update status, and review history.
 
-First, run the development server:
+**Stack:** Next.js App Router (TypeScript), Tailwind CSS, Supabase (Auth, Postgres, Storage) via `@supabase/ssr`, server actions, Vercel-ready.
+
+## 1. Create a Supabase project
+
+1. Open [Supabase](https://supabase.com) and create a new project.
+2. Wait until the database is ready.
+3. In **Project Settings → API**, copy:
+   - Project URL
+   - `anon` `public` API key
+
+## 2. Run the database migration
+
+1. Open the Supabase dashboard **SQL Editor**.
+2. Paste the contents of [`supabase/migration.sql`](./supabase/migration.sql).
+3. Run the script.
+
+This creates `profiles`, `complaints`, and `status_history`; signup and `updated_at` triggers; `is_admin()`; RLS policies; the private `complaint-images` storage bucket; and storage policies.
+
+## 3. Set environment variables
+
+Copy the example file and fill in your project values:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+```
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 4. Run locally
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm install
+npm run dev
+```
 
-## Learn More
+Open [http://localhost:3000](http://localhost:3000).
 
-To learn more about Next.js, take a look at the following resources:
+1. Sign up as a student (`/signup`).
+2. Promote at least one user to admin (SQL below).
+3. Log in: students land on `/student`, admins on `/admin`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Route protection lives in `src/proxy.ts` (the Next.js 16 equivalent of middleware). Students can only use `/student/*`; admins can only use `/admin/*`.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+If email confirmation is enabled in Supabase Auth, confirm the account before logging in. For local testing you can disable **Confirm email** under **Authentication → Providers → Email**.
 
-## Deploy on Vercel
+## 5. Promote a user to admin
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+After the user has signed up, copy their UUID from **Authentication → Users** (or from `profiles.id`) and run:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```sql
+update profiles set role='admin' where id = '<user-uuid>';
+```
+
+## 6. Deploy to Vercel
+
+1. Push this repository to GitHub (or import the folder in Vercel).
+2. Create a Vercel project from the repo.
+3. Add the same environment variables:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+4. Deploy. In Supabase **Authentication → URL Configuration**, add your Vercel URL to **Site URL** and **Redirect URLs**.
+
+## Roles and features
+
+| Role | Routes | Capabilities |
+| --- | --- | --- |
+| Student | `/student`, `/student/new`, `/student/[id]` | Create complaints (optional JPG/PNG/WebP image, max 5 MB), list own complaints, view detail, signed image URL, assignment, and status timeline |
+| Admin | `/admin`, `/admin/[id]` | Stats, filter all complaints, assign an admin, change status, write status history |
+
+Images are stored privately at `{user_id}/{uuid}.{ext}` in the `complaint-images` bucket. Detail pages request a signed URL that expires after 60 seconds.
